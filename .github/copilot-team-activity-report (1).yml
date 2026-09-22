@@ -1,0 +1,62 @@
+# Save this file as .github/workflows/copilot-team-activity-report.yml
+# in the repo you want to run the report from.
+#
+# Required setup before this will run:
+#   1. Repo secret: COPILOT_REPORT_PAT
+#      - A classic PAT (Settings > Developer settings > Personal access
+#        tokens > Tokens (classic)) with the 'manage_billing:copilot'
+#        or 'read:enterprise' scope, owned by an enterprise owner or
+#        billing manager.
+#   2. Repo secret: ENTERPRISE_SLUG
+#      - Your enterprise's URL slug, e.g. 'ecanarys'.
+#   3. This workflow expects copilot_team_activity_report.py to live at
+#      the repo root (or update the path below).
+
+name: Copilot Enterprise Team Activity Report
+
+on:
+  schedule:
+    # Runs at 06:00 UTC on the 2nd of every month — adjust the hour to your timezone/preference.
+    - cron: "0 6 2 * *"
+  workflow_dispatch: {}   # allows manual "Run workflow" trigger too
+
+permissions:
+  contents: write   # only needed if you commit the CSV back to the repo
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Copilot team activity report
+        env:
+          GITHUB_TOKEN: ${{ secrets.COPILOT_REPORT_PAT }}
+        run: |
+          python copilot_team_activity_report.py "${{ secrets.ENTERPRISE_SLUG }}" copilot_team_activity_report.csv
+
+      # Option A: keep the report as a downloadable Actions artifact
+      - name: Upload report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-team-activity-report
+          path: copilot_team_activity_report.csv
+          retention-days: 90
+
+      # Option B: also commit the CSV back into the repo (comment out if not wanted)
+      - name: Commit report to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add copilot_team_activity_report.csv
+          git diff --cached --quiet || git commit -m "Update Copilot enterprise team activity report"
+          git push
